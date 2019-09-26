@@ -425,14 +425,6 @@ summary {
 <p>In this notebook, we will use sentiment analysis to analyze some of English writer Jane Austen’s most famous books. Specifically, we will try to get information on how the plot progresses throughout the chapters in these stories.</p>
 <p>First of all, let’s import some essential libraries.</p>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1"><span class="kw">library</span>(dplyr)  <span class="co"># gives you the '%&gt;%' operator among many other useful things</span></a></code></pre></div>
-<pre><code>## 
-## Attaching package: 'dplyr'</code></pre>
-<pre><code>## The following objects are masked from 'package:stats':
-## 
-##     filter, lag</code></pre>
-<pre><code>## The following objects are masked from 'package:base':
-## 
-##     intersect, setdiff, setequal, union</code></pre>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">library</span>(ggplot2)</a></code></pre></div>
 <p>To achieve our task, we will use the dataset provided in the <em>janeaustenr</em> R library.</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb6-1" data-line-number="1"><span class="kw">library</span>(janeaustenr)  <span class="co"># we will get our dataset from here. Make sure you install the package before!</span></a>
