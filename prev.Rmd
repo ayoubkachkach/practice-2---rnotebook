@@ -6,177 +6,7 @@ output:
   html_notebook: 
    highlight: tango
 ---
-In this notebook, we will use sentiment analysis to analyze some of English writer Jane Austen's most famous books. Specifically, we will try to get information on how the plot progresses throughout the chapters in these stories.
 
-First of all, let's import some essential libraries.
-```{r}
-library(dplyr)  # gives you the '%>%' operator among many other useful things
-library(ggplot2)
-```
-
-To achieve our task, we will use the dataset provided in the *janeaustenr* R library.
-```{r eval=TRUE}
-library(janeaustenr)  # we will get our dataset from here. Make sure you install the package before!
-
-austen <- austen_books()  # store an instance of the dataset in our variable `austen`
-head(austen, 10)  # display 10 top rows in austen.
-```
-
-The table *austen* contains two columns:
-
-* *text*: a piece of text representing a line in the book.
-* *book*: the book the piece of text was taken from.
-
-The text in this data is tokenized by line. Note the difference between line and sentence. A line is a horizontal unit of text that spans from left to right in a book. A sentence is set of words that are complete in themselves, that convey some thought. A line might well cut a sentence in the middle. Furthermore, a line is highly-dependent on the size of the book: lines in a wider book will hold more words. This line tokenization will not allow us to do any analysis on the meaning conveyed in the stories. Therefore, we will have to think of something else ...
-
-## Exploring the dataset
-First, let's find which books are present in the dataset.
-```{r}
-austen %>% distinct(book)
-```
-
-Let's plot the number of lines we have for each book. For this, we will use a bar plot.
-```{r}
-# Because we are using geom_bar(), the count of rows belonging to each book is implicitly set as the y-axis
-ggplot(austen, aes(x=book)) + geom_bar()
-```
-
-We notice that the highest number of lines in our dataset belongs to 'Emma'. In the next section, we will try to tokenize Emma into chapters.
-
-## Splitting 'Emma' into chapters
-First, let's create a dataframe containing only lines from 'Emma'. Additionally, we would also want to keep track of the line number from the book each row represents. 
-
-```{r}
-emma <- austen %>% filter(book == "Emma")
-# We notice that the linenumber is really nothing much than the row number in our table.
-emma <- emma %>% mutate(linenumber = row_number())
-
-head(emma)
-```
-Nice! Our dataframe *emma* not has an extra-column *linenumber* which does exactly what we wanted.
-
-To split *emma* into chapters, *we will first need to detect the start of chapters*. By taking a quick look at the dataset, we notice that chapters are announced in a line of their own. Sweet! This makes our task of detecting beginnings of chapter easier.
-
-As a first attempt, let's first get all rows containing chapter in their text.
-
-```{r}
-library(stringr)  # library that provides the function str_subset
-
-# Match substrings in the column 'text' in the dataframe 'emma' with the regex "chapter".
-results <- str_subset(emma$text, pattern = regex("chapter", ignore_case = TRUE))
-
-head(results, 15) # Let's print the first 15 results we got
-```
-
-We notice that rows 10 and 11 are not quite what we were looking for. str_subset is not to blame, though! The text in rows 10 and 11 does contain the word "chapter" which is enough for it to match our regular expression.
-
-To solve this issue, we could take advantage of the fact that chapter announcements are made on a line of their own and require in our regex that the word chapter be matched only if it is the first word in the line. We could also make our regular expression even more robust by requiring that chapter is followed by digits representing the chapter number.
-
-```{r}
-# 1st solution. We use the caret ('^') to specify that we only match "chapter" if it at the start of the line.
-results <- str_subset(emma$text, regex("^chapter", ignore_case = TRUE))
-
-# 2nd solution. Adds requirement that "chapter " should be followed by 1 or more ('+')
-# digits ('\\d') or roman numerals ('i', 'v', 'x' ...)
-results <- str_subset(emma$text, regex("^chapter [\\divxcl]+", ignore_case = TRUE))
-
-head(results, 15)
-```
-
-Now that we have tested our regular expression and got satisfactory results, we can use it to detect chapter starts.
-
-We will add a new column *is_chapter* to our dataset which is TRUE if the line represents a chapter start. FALSE otherwise.
-
-```{r}
-# We use str_detect which returns TRUE if the string matches the pattern and FALSE otherwise.
-emma <- emma %>% 
-  mutate(is_chapter = str_detect(text, pattern = regex("^chapter [\\divxc]+", ignore_case = TRUE)))
-
-emma[10:20,]  # Rows from 10 to 20 exclusive.
-```
-
-Notice that the value of is_chapter for row 3 is TRUE, as we would expect.
-
-Having is_chapter on its own is not very useful. One way we could achieve our goal of splitting our text into chapters is to create a column *chapter* which holds the chapter number that each line belongs to.
-
-```{r}
-# In each row, cumsum calculates the sum of the column (is_chapter here) from the start of
-# the dataframe until that row.
-emma <- emma %>% mutate(chapter = cumsum(is_chapter))
-
-emma[10:20,]
-```
-
-To understand why this works, we need to understand how R interprets arithmetic operations on booleans. The code snippet below illustrates this:
-
-```{r}
-FALSE + FALSE  # interpreted as 0 + 0
-FALSE + TRUE  # interpreted as 0 + 1
-```
-
-Let's look at how this would reflect on data organizeds 
-```{r}
-# Create dummy example.
-df <- data.frame(c(FALSE, FALSE, TRUE, FALSE, TRUE, FALSE, FALSE))
-colnames(df) <- 'is_chapter' # names our column 'is_chapter'
-head(df)
-
-df %>% mutate(chapter=cumsum(is_chapter))  # store result of cumsum in col chapter
-```
-
-Notice how 'chapter' is incremented only when in the columns when is_chapter is TRUE. This makes sense: as soon as a chapter start is encountered, the chapter number is incremented! Sweet!
-
-## Hooking it all together
-
-In the previous section, we added columns linenumber and chapter to represent the line number and chapter that each row belongs to. However, we only did so for the book 'Emma'.
-Let's apply it on 
-```{r}
-  result <- austen %>% 
-    mutate(linenumber = row_number(),
-           chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]+", ignore_case = TRUE)))) %>%
-  ungroup()
-
-  result[12620:12630,]
-```
-
-This didn't work. As you can see between rows 5 and 6, the linenumber and chapter count carries over to the next book. Ideally, we would want to 'reset' this counter in some sense for each new book. Alternatively, we could apply the operations we were doing on *each book in its own*. This is basically what group_by allows us to do. Grouping the dataframe by books before applying the operations means that the operations will be applied on each group (i.e each book) separately!
-
-```{r}
-  result <- austen %>% 
-    group_by(book) %>%
-    mutate(linenumber = row_number(),
-           chapter = cumsum(str_detect(text, regex("^chapter [\\divxlc]+", ignore_case = TRUE)))) %>%
-  ungroup()
-
-  result[12620:12630,]
-```
-
-Nice.
-
-Now is a good time to decide how we will analyze the plot in the stories. In this notebook, we will try to categorize the plot in each chapter as either "mostly positive" or "mostly negative". To do this, we could use some of the sentiment dictionaries available in R. These dictionaries map each word to a sentiment. The dictionary we will be using (trained on data from search engine Bing) classifies each word as either positive or negative.
-
-Since the dictionary we will be using operates on words, we will have to tokenize the text we have from lines into words.
-
-```{r}
-library(tidytext)  # gives us unnest_tokens
-
-# split line in text into words and store result in new column called 'word'
-austen_tokens <- austen %>% unnest_tokens(word, text)
-```
-
-If we look at the most frequent words in our dataset,
-```{r}
-austen_tokens %>% count(word) %>% arrange(desc(n))
-```
-
----
-title: "Plot analysis on Jane Austen's books"
-output:
-  html_document:
-   highlight: tango
-  html_notebook: 
-   highlight: tango
----
 In this notebook, we will use sentiment analysis to analyze some of English writer Jane Austen's most famous books. Specifically, we will try to get information on how the plot progresses throughout the chapters in these stories.
 
 First of all, let's import some essential libraries.
@@ -335,12 +165,9 @@ library(tidytext)  # gives us unnest_tokens
 austen_tokens <- austen %>% unnest_tokens(word, text)
 ```
 
-If we look at the most frequent words in our dataset:
+If we look at the most frequent words in our dataset,
 ```{r}
-austen_tokens
-
-austen_tokens %>% count(word) %>%
-  arrange(desc(n))
+austen_tokens %>% count(word) %>% arrange(desc(n))
 ```
 This isn't very insightful. Words like 'the', 'to' and 'a' are called "stop-words". They are the most common words in a language and are usually useless when it comes to natural language processing. It would be a good idea to get rid of these.
 
@@ -431,4 +258,5 @@ ggplot(austen_sentiments, aes(x=chapter, y=sentiment,fill=book)) +
 
 Notice the sudden plot twist at the end of Mansfield Park! Persuasion seems like a nice bedtime story. Pride and Prejudice explains well the phrase 'rollercoaster of emotions'.
 
-That was it! This exercise was adapted from [this article](https://www.tidytextmining.com/sentiment.html) (link: https://www.tidytextmining.com/sentiment.html) 
+That was it! This exercise was adapted from https://www.tidytextmining.com/sentiment.html
+To keep things simple, we omitted some really cool stuff from the article so please take a look at it!
